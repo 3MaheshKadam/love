@@ -63,10 +63,13 @@ export function filterContent(text: string): FilterResult {
     }
 
     // Profanity check (word boundary matching)
+    // Strip punctuation to catch bypasses like "s.e.x" or "f@ck"
     const lower = trimmed.toLowerCase();
+    const noPunctuation = lower.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()@"']/g, "");
+
     for (const word of BLOCKED_WORDS) {
-        // Match as substring — catches variations like "sexual", "masturbating"
-        if (lower.includes(word)) {
+        // Match as substring against the punctuation-stripped string
+        if (noPunctuation.includes(word)) {
             return { clean: false, reason: "Content contains inappropriate language" };
         }
     }

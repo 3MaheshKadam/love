@@ -52,9 +52,12 @@ export async function POST(req: Request) {
         user.resetTokenExpiry = resetExpiry;
         await user.save();
 
-        // Phase 1: Log raw token to console (raw token goes in the link)
-        const resetUrl = `${process.env.NEXTAUTH_URL}/reset-password?token=${rawToken}`;
-        console.log(`\n🔐 Password Reset Link for ${email}:\n${resetUrl}\n`);
+        // Phase 1: Log raw token to console (only in dev)
+        // Phase 2: Send actual email
+        if (process.env.NODE_ENV === "development") {
+            const resetUrl = `${process.env.NEXTAUTH_URL}/reset-password?token=${rawToken}`;
+            console.log(`\n🔐 Password Reset Link for ${email}:\n${resetUrl}\n`);
+        }
 
         return NextResponse.json({
             success: true,

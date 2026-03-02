@@ -88,10 +88,16 @@ export async function GET(req: Request, { params }: RouteParams) {
                 );
             }
 
-            // Increment play count
+            // Atomically increment play count to prevent race conditions
+            await User.updateOne(
+                { _id: user._id },
+                {
+                    $inc: { daily_play_count: 1 },
+                    $set: { last_played_at: new Date() }
+                }
+            );
+            // Update local object for the response below
             user.daily_play_count += 1;
-            user.last_played_at = new Date();
-            await user.save();
         }
 
         // ── Get content for the requested mode ──

@@ -5,6 +5,7 @@ export interface IUser extends Document {
     email: string;
     password?: string;
     provider: "google" | "email";
+    role: "user" | "admin";
     subscription_status: "free" | "premium";
     daily_play_count: number;
     last_played_at: Date | null;
@@ -34,6 +35,11 @@ const UserSchema = new Schema<IUser>({
         type: String,
         enum: ["google", "email"],
         default: "email",
+    },
+    role: {
+        type: String,
+        enum: ["user", "admin"],
+        default: "user",
     },
     subscription_status: {
         type: String,
