@@ -1,0 +1,178 @@
+# LovePlay Backend — API Reference (Integration Doc)
+
+## Response Format (All Endpoints)
+
+```json
+{ "success": true/false, "message": "...", "data": { ... } }
+```
+
+---
+
+## 🔐 Authentication
+
+### POST `/api/auth/signup`
+> **Rate Limited**: 5 requests / 15 min per IP
+
+```
+Body: { "name": "John", "email": "john@email.com", "password": "123456" }
+✅ 201: { success: true, message: "Account created successfully", data: { id, name, email } }
+❌ 400: password < 6 chars
+❌ 409: email already exists
+❌ 429: rate limited
+```
+
+---
+
+### POST `/api/auth/[...nextauth]`
+> NextAuth v5 handler — use [signIn("credentials", { email, password })](file:///d:/z/backend-play/lib/auth-options.ts#60-75) or [signIn("google")](file:///d:/z/backend-play/lib/auth-options.ts#60-75) from frontend
+
+```
+Credentials: { email, password } → returns JWT session
+Google: redirects to Google OAuth → auto-creates user on first login
+```
+
+**Session object** (available via `useSession()` or [auth()](file:///d:/z/backend-play/lib/auth-options.ts#21-51)):
+```json
+{ "user": { "id": "mongo_id", "name": "John", "email": "john@email.com", "subscription_status": "free" } }
+```
+
+---
+
+### POST `/api/auth/forgot-password`
+> **Rate Limited**: 3 requests / 15 min per IP
+
+```
+Body: { "email": "john@email.com" }
+✅ 200: { success: true, message: "If an account exists..." }
+```
+Token is SHA-256 hashed in DB. Raw token logged to console (Phase 1).
+
+---
+
+### POST `/api/auth/reset-password`
+
+```
+Body: { "token": "raw_token_from_url", "password": "newpass123" }
+✅ 200: { success: true, message: "Password has been reset..." }
+❌ 400: invalid/expired token
+```
+
+---
+
+### DELETE `/api/auth/delete-account`
+> **Requires auth session**
+
+```
+No body needed. Uses session email.
+✅ 200: { success: true, message: "Account permanently deleted" }
+❌ 401: not logged in
+```
+
+---
+
+## 🎮 Game Engine
+
+### GET `/api/game/[mode]`
+> **Requires auth session**
+
+**Available modes**: `truth-or-dare` | `spin-wheel` | `scratch-reveal` | `deep-talk` | `challenge`
+
+**Query params** (truth-or-dare only): `?category=cute|romantic|bold|deep`
+
+```
+✅ 200:
+{
+  "success": true,
+  "data": {
+    "mode": "truth-or-dare",
+    "isPremium": false,
+    "playsRemaining": 2,
+    "content": [{ "id": "tc1", "text": "...", "type": "truth" }],
+    "category": "cute",                    // truth-or-dare only
+    "availableCategories": ["cute","romantic","deep"],  // truth-or-dare only
+    "timerDuration": 300                   // challenge mode only (seconds)
+  }
+}
+
+❌ 403: bold category (free user) → { data: { premiumRequired: true } }
+❌ 429: daily limit reached (free: 3/day) → { data: { limitReached: true, playsRemaining: 0 } }
+```
+
+**Content per mode**:
+| Mode | Cards | Notes |
+|---|---|---|
+| `truth-or-dare` | 20 per category × 4 categories | Bold = premium only |
+| `spin-wheel` | 18 challenges | Returns all (wheel needs segments) |
+| `scratch-reveal` | 6 random from 20 | Random subset per request |
+| `deep-talk` | 25 questions | Full shuffled deck |
+| `challenge` | 1 random from 15 | + `timerDuration: 300` |
+
+---
+
+## 👤 User Management
+
+### GET `/api/user/profile`
+> **Requires auth session**
+
+```
+✅ 200:
+{
+  "success": true,
+  "data": { "id", "name", "email", "provider", "subscription_status", "daily_play_count", "last_played_at", "created_at" }
+}
+```
+
+### PUT `/api/user/profile`
+> **Requires auth session**
+
+```
+Body: { "name": "New Name" }
+✅ 200: { success: true, message: "Profile updated", data: { id, name, email, provider, subscription_status } }
+```
+
+### POST `/api/user/subscription`
+> **DEV ONLY** — controlled by `ALLOW_DEV_SUBSCRIPTION=true` in [.env.local](file:///d:/z/backend-play/.env.local)
+
+```
+Body: { "status": "premium" }  // or "free"
+✅ 200: { success: true, data: { subscription_status: "premium" } }
+❌ 403: endpoint disabled (flag not set)
+```
+
+---
+
+## 🗂 File Structure
+
+```
+backend-play/
+├── lib/
+│   ├── mongodb.ts          ← DB connection singleton
+│   ├── auth-options.ts     ← NextAuth v5 config (Google + Credentials, JWT)
+│   ├── game-content.ts     ← ~120 static cards, shuffle utils
+│   └── rate-limit.ts       ← IP-based rate limiter
+├── models/
+│   └── User.ts             ← Mongoose schema
+├── middleware.ts            ← Route protection (redirects to /login)
+├── types/
+│   └── next-auth.d.ts      ← Session type augmentation
+├── app/
+│   ├── api/auth/            ← [...nextauth], signup, delete-account, forgot-password, reset-password
+│   ├── api/game/[mode]/     ← Game content API
+│   ├── api/user/            ← profile, subscription
+│   ├── login/page.tsx       ← Minimal login (functional)
+│   ├── signup/page.tsx      ← Minimal signup (functional)
+│   └── components/
+│       └── SessionProvider.tsx
+└── .env.local               ← MONGODB_URI, NEXTAUTH_SECRET, Google OAuth, ALLOW_DEV_SUBSCRIPTION
+```
+
+## ⚙️ Environment Variables Required
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `MONGODB_URI` | ✅ | MongoDB Atlas connection string |
+| `NEXTAUTH_SECRET` | ✅ | JWT signing secret |
+| `NEXTAUTH_URL` | ✅ | App base URL (`http://localhost:3000`) |
+| `GOOGLE_CLIENT_ID` | For Google auth | Google OAuth |
+| `GOOGLE_CLIENT_SECRET` | For Google auth | Google OAuth |
+| `ALLOW_DEV_SUBSCRIPTION` | Dev only | Enables subscription toggle |
